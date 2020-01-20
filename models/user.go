@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"qiyetalk-server-go/db"
+	"time"
+)
 
 //User ...
 type User struct {
@@ -10,4 +13,15 @@ type User struct {
 	Email             string    `db:"email" json:"email"`
 	UpdatedAt         time.Time `db:"updated_at" json:"updated_at" pg:",null"`
 	CreatedAt         time.Time `db:"created_at" json:"created_at" pg:",null"`
+}
+
+// FindByEmail ...
+func FindByEmail(email string) *User {
+	var users []User
+	_db := db.GetDB()
+	_db.Model(&users).Where("email = ?", email).Select()
+	if len(users) > 0 {
+		return &users[0]
+	}
+	return nil
 }

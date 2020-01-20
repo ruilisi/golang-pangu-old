@@ -43,14 +43,11 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	// Salt and hash the password using the bcrypt algorithm
-	// The second argument is the cost of hashing, which we arbitrarily set as 8 (this value can be more or less, depending on the computing power you wish to utilize)
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
-
 	_db := db.GetDB()
-	err = _db.Insert(&models.User{
+	encryptedPassword, _ := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
+	err := _db.Insert(&models.User{
 		Email:             creds.Email,
-		EncryptedPassword: string(hashedPassword),
+		EncryptedPassword: string(encryptedPassword),
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
 	})
@@ -93,20 +90,22 @@ func main() {
 			}
 		},
 		Authenticator: func(c *gin.Context) (interface{}, error) {
-			var loginVals Credentials
-			if err := c.ShouldBind(&loginVals); err != nil {
+			creds := &Credentials{}
+			if err := c.ShouldBind(&creds); err != nil {
 				return "", jwt.ErrMissingLoginValues
 			}
-			userID := loginVals.Email
-			password := loginVals.Password
-
-			fmt.Println(userID, password)
-			if (userID == "admin" && password == "admin") || (userID == "test" && password == "test") {
-				return &models.User{
-					Email: userID,
-				}, nil
+			user := models.FindByEmail(creds.Email)
+			if user != nil {
+				err := bcrypt.CompareHashAndPassword([]byte(user.EncryptedPassword), []byte(creds.Password))
+				fmt.Println(err)
+				if err == nil {
+					return &models.User{
+						Email: creds.Email,
+					}, nil
+				} else {
+					return nil, err
+				}
 			}
-
 			return nil, jwt.ErrFailedAuthentication
 		},
 		Authorizator: func(data interface{}, c *gin.Context) bool {
