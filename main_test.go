@@ -16,5 +16,7 @@ func TestUserSelection(m *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(users)
+	for _, user := range users {
+		fmt.Println(user, user.Data["privilege"])
+	}
 }
