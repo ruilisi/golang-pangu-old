@@ -1,12 +1,15 @@
 package db
 
 import (
+	"crypto/tls"
 	"database/sql"
-	"fmt"
-	"log"
+	"os"
+	"time"
 
 	"github.com/go-gorp/gorp"
 	_ "github.com/lib/pq" //import postgres
+
+	"github.com/go-pg/pg/v9"
 )
 
 //DB ...
@@ -20,39 +23,49 @@ const (
 	//DbPassword ...
 	DbPassword = "postgres"
 	//DbName ...
-	DbName = "qiyetalk_go"
+	DbName = "qiyetalk_deveopment"
 )
 
 var db *gorp.DbMap
 
-//Init ...
-func Init() {
-	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable",
-		DbUser, DbPassword, DbName)
-
-	var err error
-	db, err = ConnectDB(dbinfo)
-	if err != nil {
-		log.Fatal(err)
+func getTLSConfig() *tls.Config {
+	pgSSLMode := os.Getenv("PGSSLMODE")
+	if pgSSLMode == "disable" {
+		return nil
 	}
-
+	return &tls.Config{
+		InsecureSkipVerify: true,
+	}
 }
 
-//ConnectDB ...
-func ConnectDB(dataSourceName string) (*gorp.DbMap, error) {
-	db, err := sql.Open("postgres", dataSourceName)
-	if err != nil {
-		return nil, err
+func pgOptions() *pg.Options {
+	return &pg.Options{
+		User:      DbUser,
+		Password:  DbPassword,
+		Database:  DbName,
+		TLSConfig: nil,
+
+		MaxRetries:      1,
+		MinRetryBackoff: -1,
+
+		DialTimeout:  30 * time.Second,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+
+		PoolSize:           10,
+		MaxConnAge:         10 * time.Second,
+		PoolTimeout:        30 * time.Second,
+		IdleTimeout:        10 * time.Second,
+		IdleCheckFrequency: 100 * time.Millisecond,
 	}
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
-	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
-	//dbmap.TraceOn("[gorp]", log.New(os.Stdout, "golang-gin:", log.Lmicroseconds)) //Trace database requests
-	return dbmap, nil
 }
 
-//GetDB ...
-func GetDB() *gorp.DbMap {
-	return db
+var _db *pg.DB
+
+// GetDB ...
+func GetDB() *pg.DB {
+	if _db == nil {
+		_db = pg.Connect(pgOptions())
+	}
+	return _db
 }

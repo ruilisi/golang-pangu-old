@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"qiyetalk-server-go/db"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -61,6 +62,7 @@ type Claims struct {
 }
 
 func main() {
+	db.GetDB()
 	router := gin.Default()
 	router.GET("/ping", func(c *gin.Context) {
 		c.String(200, "pong")

@@ -1,23 +1,20 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/ruilisi/qiyetalk-server-go/db"
+	"qiyetalk-server-go/db"
+	"qiyetalk-server-go/models"
 )
 
 // TestUser ...
-func TestUser(m *testing.T) {
-	Init()
-	var users []User
+func TestUserSelection(m *testing.T) {
+	db := db.GetDB()
+	var users []models.User
 	err := db.Model(&users).Select()
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printn(users)
-}
-
-// TestMain
-func TestMain(m *testing.T) {
-	println("shit")
+	fmt.Println(users)
 }
