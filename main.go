@@ -3,19 +3,23 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
+	"qiyetalk-server-go/db"
 	"qiyetalk-server-go/models"
 
 	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var identityKey = "email"
 var jwtKey = []byte("my_secret_key")
 
-type login struct {
+// Credentials ...
+type Credentials struct {
 	Email    string `form:"email" json:"email" binding:"required"`
 	Password string `form:"password" json:"password" binding:"required"`
 }
@@ -29,6 +33,32 @@ func helloHandler(c *gin.Context) {
 		"email":  user.(*models.User).Email,
 		"text":   "Hello World.",
 	})
+}
+
+// Signup ...
+func Signup(c *gin.Context) {
+	creds := &Credentials{}
+	if err := c.ShouldBindJSON(&creds); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Salt and hash the password using the bcrypt algorithm
+	// The second argument is the cost of hashing, which we arbitrarily set as 8 (this value can be more or less, depending on the computing power you wish to utilize)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
+
+	_db := db.GetDB()
+	err = _db.Insert(&models.User{
+		Email:             creds.Email,
+		EncryptedPassword: string(hashedPassword),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(200)
 }
 
 func main() {
@@ -63,7 +93,7 @@ func main() {
 			}
 		},
 		Authenticator: func(c *gin.Context) (interface{}, error) {
-			var loginVals login
+			var loginVals Credentials
 			if err := c.ShouldBind(&loginVals); err != nil {
 				return "", jwt.ErrMissingLoginValues
 			}
@@ -116,6 +146,7 @@ func main() {
 	}
 
 	r.POST("/users/sign_in", authMiddleware.LoginHandler)
+	r.POST("/users/sign_up", Signup)
 
 	r.NoRoute(authMiddleware.MiddlewareFunc(), func(c *gin.Context) {
 		claims := jwt.ExtractClaims(c)
