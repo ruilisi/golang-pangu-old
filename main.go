@@ -1,73 +1,139 @@
 package main
 
 import (
-	"net/http"
-	"qiyetalk-server-go/db"
+	"fmt"
+	"log"
+	"os"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"qiyetalk-server-go/models"
+
+	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
 )
 
+var identityKey = "email"
 var jwtKey = []byte("my_secret_key")
 
-var users = map[string]string{
-	"user1": "password1",
-	"user2": "password2",
+type login struct {
+	Email    string `form:"email" json:"email" binding:"required"`
+	Password string `form:"password" json:"password" binding:"required"`
 }
 
-type Credentials struct {
-	Password string `json:"password" binding:"required"`
-	Username string `json:"username" binding:"required"`
-}
-
-func Signin(c *gin.Context) {
-	var creds Credentials
-
-	if err := c.ShouldBindJSON(&creds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	expectedPassword, ok := users[creds.Username]
-
-	if !ok || expectedPassword != creds.Password {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	expirationTime := time.Now().Add(5 * time.Minute)
-
-	claims := &Claims{
-		Username: creds.Username,
-		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: expirationTime.Unix(),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString(jwtKey)
-	if err != nil {
-		c.AbortWithStatus(http.StatusUnauthorized)
-		return
-	}
-
-	c.SetCookie("token", tokenString, 3600, "/", "wukong.com", false, true)
-}
-
-type Claims struct {
-	Username string `json:"username"`
-	jwt.StandardClaims
+func helloHandler(c *gin.Context) {
+	claims := jwt.ExtractClaims(c)
+	user, _ := c.Get(identityKey)
+	fmt.Println(claims)
+	c.JSON(200, gin.H{
+		"userID": claims[identityKey],
+		"email":  user.(*models.User).Email,
+		"text":   "Hello World.",
+	})
 }
 
 func main() {
-	db.GetDB()
-	router := gin.Default()
-	router.GET("/ping", func(c *gin.Context) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "80"
+	}
+
+	r := gin.New()
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
+
+	// the jwt middleware
+	authMiddleware, err := jwt.New(&jwt.GinJWTMiddleware{
+		Realm:       "qiyetalk",
+		Key:         jwtKey,
+		Timeout:     time.Hour,
+		MaxRefresh:  time.Hour,
+		IdentityKey: identityKey,
+		PayloadFunc: func(data interface{}) jwt.MapClaims {
+			if v, ok := data.(*models.User); ok {
+				return jwt.MapClaims{
+					identityKey: v.Email,
+				}
+			}
+			return jwt.MapClaims{}
+		},
+		IdentityHandler: func(c *gin.Context) interface{} {
+			claims := jwt.ExtractClaims(c)
+			return &models.User{
+				Email: claims[identityKey].(string),
+			}
+		},
+		Authenticator: func(c *gin.Context) (interface{}, error) {
+			var loginVals login
+			if err := c.ShouldBind(&loginVals); err != nil {
+				return "", jwt.ErrMissingLoginValues
+			}
+			userID := loginVals.Email
+			password := loginVals.Password
+
+			fmt.Println(userID, password)
+			if (userID == "admin" && password == "admin") || (userID == "test" && password == "test") {
+				return &models.User{
+					Email: userID,
+				}, nil
+			}
+
+			return nil, jwt.ErrFailedAuthentication
+		},
+		Authorizator: func(data interface{}, c *gin.Context) bool {
+			if v, ok := data.(*models.User); ok && v.Email == "admin" {
+				return true
+			}
+
+			return false
+		},
+		Unauthorized: func(c *gin.Context, code int, message string) {
+			c.JSON(code, gin.H{
+				"code":    code,
+				"message": message,
+			})
+		},
+		// TokenLookup is a string in the form of "<source>:<name>" that is used
+		// to extract token from the request.
+		// Optional. Default value "header:Authorization".
+		// Possible values:
+		// - "header:<name>"
+		// - "query:<name>"
+		// - "cookie:<name>"
+		// - "param:<name>"
+		TokenLookup: "header: Authorization, query: token, cookie: jwt",
+		// TokenLookup: "query:token",
+		// TokenLookup: "cookie:token",
+
+		// TokenHeadName is a string in the header. Default value is "Bearer"
+		TokenHeadName: "Bearer",
+
+		// TimeFunc provides the current time. You can override it to use another time value. This is useful for testing or if your server uses a different time zone than your tokens.
+		TimeFunc: time.Now,
+	})
+
+	if err != nil {
+		log.Fatal("JWT Error:" + err.Error())
+	}
+
+	r.POST("/users/sign_in", authMiddleware.LoginHandler)
+
+	r.NoRoute(authMiddleware.MiddlewareFunc(), func(c *gin.Context) {
+		claims := jwt.ExtractClaims(c)
+		log.Printf("NoRoute claims: %#v\n", claims)
+		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Page not found"})
+	})
+
+	r.GET("/ping", func(c *gin.Context) {
 		c.String(200, "pong")
 	})
 
-	router.POST("/users/sign_in", Signin)
-	router.Run(":80")
+	auth := r.Group("/auth")
+	// Refresh time can be longer than token timeout
+	auth.GET("/refresh_token", authMiddleware.RefreshHandler)
+	auth.Use(authMiddleware.MiddlewareFunc())
+	{
+		auth.GET("/hello", helloHandler)
+	}
+
+	r.Run(":" + port)
 }
