@@ -15,6 +15,14 @@ type User struct {
 	CreatedAt         time.Time `db:"created_at" json:"created_at" pg:",null"`
 }
 
+// Credentials ...
+type Credentials struct {
+	Email    string `form:"email" json:"email" binding:"required"`
+	Password string `form:"password" json:"password" binding:"required"`
+}
+
+var IdentityKey = "email"
+
 // FindByEmail ...
 func FindByEmail(email string) *User {
 	var users []User
