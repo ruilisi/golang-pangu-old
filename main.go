@@ -12,6 +12,7 @@ import (
 	"qiyetalk-server-go/utils"
 
 	jwt "github.com/appleboy/gin-jwt/v2"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -59,6 +60,14 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "OPTIONS", "PUT", "DELETE"},
+		AllowHeaders:     []string{"*"},
+		ExposeHeaders:    []string{"Authorization"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	authMiddleware, err := utils.JwtMiddleWare()
 
@@ -76,8 +85,12 @@ func main() {
 	})
 
 	r.GET("/ping", func(c *gin.Context) {
-		println(os.Getenv("WECHAT_APP_ID"))
 		c.String(200, "pong")
+	})
+
+	r.GET("/data", func(c *gin.Context) {
+		println("shit")
+		c.JSON(200, gin.H{"wechat_app_id": os.Getenv("WECHAT_APP_ID")})
 	})
 
 	auth := r.Group("/auth")
