@@ -17,8 +17,9 @@ type User struct {
 
 // Credentials ...
 type Credentials struct {
-	Email    string `form:"email" json:"email" binding:"required"`
-	Password string `form:"password" json:"password" binding:"required"`
+	Email                string `form:"email" json:"email" binding:"required"`
+	Password             string `form:"password" json:"password" binding:"required"`
+	PasswordConfirmation string `form:"password_confirmation" json:"password_confirmation" binding:"required"`
 }
 
 var IdentityKey = "email"

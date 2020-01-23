@@ -30,13 +30,30 @@ func helloHandler(c *gin.Context) {
 
 // Signup ...
 func Signup(c *gin.Context) {
-	creds := &models.Credentials{}
-	if err := c.ShouldBindJSON(&creds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	type Data struct {
+		User models.Credentials `json:"user" binding:"required"`
+	}
+
+	data := &Data{}
+	if err := c.ShouldBindJSON(&data); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	creds := data.User
+
+	if creds.Password != creds.PasswordConfirmation {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Your password and confirmation password do not match"})
 		return
 	}
 
 	_db := db.GetDB()
+
+	user := models.FindByEmail(creds.Email)
+	if user != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Your account has been registered"})
+		return
+	}
 	encryptedPassword, _ := bcrypt.GenerateFromPassword([]byte(creds.Password), 8)
 	err := _db.Insert(&models.User{
 		Email:             creds.Email,
@@ -45,7 +62,7 @@ func Signup(c *gin.Context) {
 		UpdatedAt:         time.Now(),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	c.Status(200)
@@ -76,7 +93,7 @@ func main() {
 	}
 
 	r.POST("/users/sign_in", authMiddleware.LoginHandler)
-	r.POST("/users/sign_up", Signup)
+	r.POST("/users", Signup)
 
 	r.NoRoute(authMiddleware.MiddlewareFunc(), func(c *gin.Context) {
 		claims := jwt.ExtractClaims(c)
@@ -89,7 +106,6 @@ func main() {
 	})
 
 	r.GET("/data", func(c *gin.Context) {
-		println("shit")
 		c.JSON(200, gin.H{"wechat_app_id": os.Getenv("WECHAT_APP_ID")})
 	})
 
