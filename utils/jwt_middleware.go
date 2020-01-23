@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"os"
 	"qiyetalk-server-go/models"
 	"time"
@@ -35,17 +34,16 @@ func JwtMiddleWare() (*jwt.GinJWTMiddleware, error) {
 			}
 		},
 		Authenticator: func(c *gin.Context) (interface{}, error) {
-			creds := &models.Credentials{}
-			if err := c.ShouldBind(&creds); err != nil {
+			data := &models.CredentialsWrapper{}
+			if err := c.ShouldBind(&data); err != nil {
 				return "", jwt.ErrMissingLoginValues
 			}
-			user := models.FindByEmail(creds.Email)
+			user := models.FindByEmail(data.User.Email)
 			if user != nil {
-				err := bcrypt.CompareHashAndPassword([]byte(user.EncryptedPassword), []byte(creds.Password))
-				fmt.Println(err)
+				err := bcrypt.CompareHashAndPassword([]byte(user.EncryptedPassword), []byte(data.User.Password))
 				if err == nil {
 					return &models.User{
-						Email: creds.Email,
+						Email: data.User.Email,
 					}, nil
 				} else {
 					return nil, err

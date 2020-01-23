@@ -30,11 +30,7 @@ func helloHandler(c *gin.Context) {
 
 // Signup ...
 func Signup(c *gin.Context) {
-	type Data struct {
-		User models.Credentials `json:"user" binding:"required"`
-	}
-
-	data := &Data{}
+	data := &models.CredentialsWrapper{}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
